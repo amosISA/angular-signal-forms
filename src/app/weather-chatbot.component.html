@@ -9,23 +9,23 @@
     <div class="grid lg:grid-cols-3 gap-6">
       <!-- Weather Form -->
       <div class="lg:col-span-1 space-y-6">
-        <!-- Weather Form -->
         <div class="bg-white rounded-2xl shadow-lg p-6">
           <h2 class="text-xl font-semibold text-gray-800 mb-4">📍 Weather Query</h2>
 
-          <form [formGroup]="weatherForm" (ngSubmit)="onSubmitWeatherQuery()" class="space-y-4">
+          <form class="space-y-4">
             <!-- Date Input -->
             <div>
               <label for="date" class="block text-sm font-medium text-gray-700 mb-1"> Date </label>
               <input
                 id="date"
                 type="date"
-                formControlName="date"
+                [control]="weatherForm.date"
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
               />
-              @if (weatherForm.get('date')?.errors && weatherForm.get('date')?.touched) {
-              <p class="text-red-500 text-xs mt-1">Date is required</p>
-              }
+              @if (shouldShowErrors(weatherForm.date().errors(), weatherForm.date().touched())) {
+              @for (error of weatherForm.date().errors(); track error) {
+              <p class="text-red-500 text-xs mt-1">{{ error.message || 'Date is required' }}</p>
+              } }
             </div>
 
             <!-- Country Input -->
@@ -36,17 +36,15 @@
               <input
                 id="country"
                 type="text"
-                formControlName="country"
+                [control]="weatherForm.country"
                 placeholder="e.g., United States"
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
               />
-              @if (weatherForm.get('country')?.errors && weatherForm.get('country')?.touched) {
-              <p class="text-red-500 text-xs mt-1">
-                @if (weatherForm.get('country')?.errors?.['required']) { Country is required } @if
-                (weatherForm.get('country')?.errors?.['minlength']) { Country must be at least 2
-                characters }
-              </p>
-              }
+              @if (shouldShowErrors(weatherForm.country().errors(),
+              weatherForm.country().touched())) { @for (error of weatherForm.country().errors();
+              track $index) {
+              <p class="text-red-500 text-xs mt-1">{{ error.message || 'Country is invalid' }}</p>
+              } }
             </div>
 
             <!-- City Input -->
@@ -55,17 +53,14 @@
               <input
                 id="city"
                 type="text"
-                formControlName="city"
+                [control]="weatherForm.city"
                 placeholder="e.g., New York"
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
               />
-              @if (weatherForm.get('city')?.errors && weatherForm.get('city')?.touched) {
-              <p class="text-red-500 text-xs mt-1">
-                @if (weatherForm.get('city')?.errors?.['required']) { City is required } @if
-                (weatherForm.get('city')?.errors?.['minlength']) { City must be at least 2
-                characters }
-              </p>
-              }
+              @if (shouldShowErrors(weatherForm.city().errors(), weatherForm.city().touched())) {
+              @for (error of weatherForm.city().errors(); track $index) {
+              <p class="text-red-500 text-xs mt-1">{{ error.message || 'City is invalid' }}</p>
+              } }
             </div>
 
             <!-- Temperature Unit -->
@@ -75,7 +70,7 @@
                 <label class="flex items-center">
                   <input
                     type="radio"
-                    formControlName="temperatureUnit"
+                    [control]="weatherForm.temperatureUnit"
                     value="celsius"
                     class="text-blue-600 focus:ring-blue-500"
                   />
@@ -84,20 +79,27 @@
                 <label class="flex items-center">
                   <input
                     type="radio"
-                    formControlName="temperatureUnit"
+                    [control]="weatherForm.temperatureUnit"
                     value="fahrenheit"
                     class="text-blue-600 focus:ring-blue-500"
                   />
                   <span class="ml-2 text-sm text-gray-700">°F (Fahrenheit)</span>
                 </label>
               </div>
+              @if (shouldShowErrors(weatherForm.temperatureUnit().errors(),
+              weatherForm.temperatureUnit().touched())) { @for (error of
+              weatherForm.temperatureUnit().errors(); track $index) {
+              <p class="text-red-500 text-xs mt-1">
+                {{ error.message || 'Temperature unit is required' }}
+              </p>
+              } }
             </div>
 
-            <!-- Submit Button -->
             <button
-              type="submit"
-              [disabled]="weatherForm.invalid || isSubmitting()"
+              type="button"
+              [disabled]="!weatherForm().valid() || isSubmitting()"
               class="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
+              (click)="onSubmitWeatherQuery()"
             >
               @if (isSubmitting()) {
               <span class="flex items-center justify-center">
@@ -130,62 +132,62 @@
           @if (isDevelopment()) {
           <div class="mt-4 p-3 bg-gray-50 rounded-lg text-xs">
             <strong>Form State:</strong>
-            <br />Valid: {{ weatherForm.valid }} <br />Value: {{ formValue() | json }}
+            <br />Valid: {{ weatherForm().valid() }} <br />Value: {{ weatherForm().value() | json }}
           </div>
           }
         </div>
       </div>
-    </div>
 
-    <!-- Chat Messages -->
-    <div class="lg:col-span-2 mt-10">
-      <div class="bg-white rounded-2xl shadow-lg flex flex-col" [style.height]="'600px'">
-        <!-- Chat Header -->
-        <div class="px-6 py-4 border-b border-gray-200">
-          <h2 class="text-xl font-semibold text-gray-800">💬 Chat</h2>
-          <p class="text-sm text-gray-600">{{ messageCount() }} messages</p>
-        </div>
-
-        <!-- Messages Container -->
-        <div class="flex-1 overflow-y-auto px-6 py-4 space-y-4" #messagesContainer>
-          @if (messages().length === 0) {
-          <div class="text-center text-gray-500 mt-12">
-            <div class="text-4xl mb-2">🤖</div>
-            <p>Hi! Fill out the weather form and click "Ask About Weather" to get started.</p>
+      <!-- Chat Messages -->
+      <div class="lg:col-span-2">
+        <div class="bg-white rounded-2xl shadow-lg flex flex-col" [style.height]="'600px'">
+          <!-- Chat Header -->
+          <div class="px-6 py-4 border-b border-gray-200">
+            <h2 class="text-xl font-semibold text-gray-800">💬 Chat</h2>
+            <p class="text-sm text-gray-600">{{ messageCount() }} messages</p>
           </div>
-          } @else { @for (message of messages(); track message.id) {
-          <div class="flex" [class.justify-end]="message.role === 'user'">
-            <div
-              class="max-w-xs lg:max-w-md px-4 py-2 rounded-2xl"
-              [class.bg-blue-600]="message.role === 'user'"
-              [class.text-white]="message.role === 'user'"
-              [class.bg-gray-100]="message.role === 'assistant'"
-              [class.text-gray-800]="message.role === 'assistant'"
-            >
-              @if (message.isLoading) {
-              <div class="flex items-center space-x-2">
-                <div class="flex space-x-1">
-                  <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                  <div
-                    class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                    style="animation-delay: 0.1s"
-                  ></div>
-                  <div
-                    class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                    style="animation-delay: 0.2s"
-                  ></div>
-                </div>
-                <span class="text-sm">Thinking...</span>
-              </div>
-              } @else {
-              <p class="text-sm">{{ message.content }}</p>
-              <p class="text-xs opacity-70 mt-1">
-                {{ formatTime(message.timestamp) }}
-              </p>
-              }
+
+          <!-- Messages Container -->
+          <div class="flex-1 overflow-y-auto px-6 py-4 space-y-4" #messagesContainer>
+            @if (messages().length === 0) {
+            <div class="text-center text-gray-500 mt-12">
+              <div class="text-4xl mb-2">🤖</div>
+              <p>Hi! Fill out the weather form and click "Ask About Weather" to get started.</p>
             </div>
+            } @else { @for (message of messages(); track message.id) {
+            <div class="flex" [class.justify-end]="message.role === 'user'">
+              <div
+                class="max-w-xs lg:max-w-md px-4 py-2 rounded-2xl"
+                [class.bg-blue-600]="message.role === 'user'"
+                [class.text-white]="message.role === 'user'"
+                [class.bg-gray-100]="message.role === 'assistant'"
+                [class.text-gray-800]="message.role === 'assistant'"
+              >
+                @if (message.isLoading) {
+                <div class="flex items-center space-x-2">
+                  <div class="flex space-x-1">
+                    <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                    <div
+                      class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                      style="animation-delay: 0.1s"
+                    ></div>
+                    <div
+                      class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                      style="animation-delay: 0.2s"
+                    ></div>
+                  </div>
+                  <span class="text-sm">Thinking...</span>
+                </div>
+                } @else {
+                <p class="text-sm">{{ message.content }}</p>
+                <p class="text-xs opacity-70 mt-1">
+                  {{ formatTime(message.timestamp) }}
+                </p>
+                }
+              </div>
+            </div>
+            } }
           </div>
-          } }
         </div>
       </div>
     </div>

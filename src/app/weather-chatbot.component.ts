@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { Control, form, minLength, required } from '@angular/forms/signals';
 import { ChatService } from './chat.service';
 
 type TemperatureUnit = 'celsius' | 'fahrenheit';
@@ -23,43 +23,56 @@ type WeatherFormData = {
 @Component({
   selector: 'app-weather-chatbot',
   templateUrl: './weather-chatbot.component.html',
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, Control],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class WeatherChatbotComponent {
-  private readonly _formBuilder = inject(FormBuilder);
   private readonly _chatService = inject(ChatService);
 
   protected readonly messages = signal<ChatMessage[]>([]);
   protected readonly isSubmitting = signal(false);
 
   protected readonly messageCount = computed(() => this.messages().length);
-  protected readonly formValue = computed(() => this.weatherForm.value);
-  protected readonly isDevelopment = signal(false);
+  protected readonly isDevelopment = signal(true);
 
-  protected readonly weatherForm: FormGroup = this._formBuilder.group({
-    date: ['', Validators.required],
-    country: ['', [Validators.required, Validators.minLength(2)]],
-    city: ['', [Validators.required, Validators.minLength(2)]],
-    temperatureUnit: ['celsius', Validators.required] as [TemperatureUnit, any],
+  private readonly _weatherData = signal<WeatherFormData>({
+    date: new Date().toISOString().split('T')[0],
+    country: '',
+    city: '',
+    temperatureUnit: 'celsius',
   });
 
-  constructor() {
-    const today = new Date().toISOString().split('T')[0];
-    this.weatherForm.patchValue({ date: today });
-  }
+  protected readonly weatherForm = form(this._weatherData, (path) => {
+    required(path.date, { message: 'Date is required' });
+    required(path.country, { message: 'Country is required' });
+    required(path.city, { message: 'City is required' });
+    minLength(path.country, 2, { message: 'Country must be at least 2 characters' });
+    minLength(path.city, 2, { message: 'City must be at least 2 characters' });
+    required(path.temperatureUnit, { message: 'Temperature unit is required' });
+  });
 
   protected onSubmitWeatherQuery(): void {
-    if (this.weatherForm.invalid) {
-      this.weatherForm.markAllAsTouched();
+    if (!this.weatherForm().valid()) {
+      this._markAllFieldsAsTouched();
       return;
     }
 
-    const formData = this.weatherForm.value as WeatherFormData;
+    const formData = this._weatherData();
     const query = this._buildWeatherQuery(formData);
 
     this._addUserMessage(query);
     this._sendMessageToAI(query);
+  }
+
+  private _markAllFieldsAsTouched(): void {
+    this.weatherForm.date().markAsTouched();
+    this.weatherForm.country().markAsTouched();
+    this.weatherForm.city().markAsTouched();
+    this.weatherForm.temperatureUnit().markAsTouched();
+  }
+
+  protected shouldShowErrors(fieldErrors: any[], fieldTouched: boolean): boolean {
+    return fieldErrors.length > 0 && fieldTouched;
   }
 
   private _buildWeatherQuery(data: WeatherFormData): string {

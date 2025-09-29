@@ -106,7 +106,7 @@ Remember: You're helping users understand weather conditions and forecasts for t
         this._http.post<GeminiResponse>(url, body, { headers })
       );
 
-      const responseText = response.candidates[0]?.content?.parts[0]?.text;
+      const responseText = response.candidates[0]?.content?.parts?.[0]?.text;
       return responseText || "Sorry, I couldn't generate a response.";
     } catch (error) {
       console.error('Gemini API Error:', error);
