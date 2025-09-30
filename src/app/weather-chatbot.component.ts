@@ -1,7 +1,8 @@
 import { JsonPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { Control, form, minLength, required } from '@angular/forms/signals';
+import { applyEach, Control, form, minLength, required } from '@angular/forms/signals';
 import { ChatService } from './chat.service';
+import { WeatherLocation } from './multi-location-weather.component';
 
 type TemperatureUnit = 'celsius' | 'fahrenheit';
 
@@ -15,8 +16,7 @@ type ChatMessage = {
 
 type WeatherFormData = {
   date: string;
-  country: string;
-  city: string;
+  locations: WeatherLocation[];
   temperatureUnit: TemperatureUnit;
 };
 
@@ -37,19 +37,36 @@ export class WeatherChatbotComponent {
 
   private readonly _weatherData = signal<WeatherFormData>({
     date: new Date().toISOString().split('T')[0],
-    country: '',
-    city: '',
+    locations: [{ city: '', country: '' }],
     temperatureUnit: 'celsius',
   });
 
   protected readonly weatherForm = form(this._weatherData, (path) => {
     required(path.date, { message: 'Date is required' });
-    required(path.country, { message: 'Country is required' });
-    required(path.city, { message: 'City is required' });
-    minLength(path.country, 2, { message: 'Country must be at least 2 characters' });
-    minLength(path.city, 2, { message: 'City must be at least 2 characters' });
+
+    applyEach(path.locations, (location) => {
+      required(location.city, { message: 'City is required' });
+      minLength(location.city, 2, { message: 'City must be at least 2 characters' });
+      required(location.country, { message: 'Country is required' });
+      minLength(location.country, 2, { message: 'Country must be at least 2 characters' });
+    });
+
     required(path.temperatureUnit, { message: 'Temperature unit is required' });
   });
+
+  protected addLocation(): void {
+    this._weatherData.update((data) => ({
+      ...data,
+      locations: [...data.locations, { city: '', country: '' }],
+    }));
+  }
+
+  protected removeLocation(index: number): void {
+    this._weatherData.update((data) => ({
+      ...data,
+      locations: data.locations.filter((_, i) => i !== index),
+    }));
+  }
 
   protected onSubmitWeatherQuery(): void {
     if (!this.weatherForm().valid()) {
@@ -66,9 +83,12 @@ export class WeatherChatbotComponent {
 
   private _markAllFieldsAsTouched(): void {
     this.weatherForm.date().markAsTouched();
-    this.weatherForm.country().markAsTouched();
-    this.weatherForm.city().markAsTouched();
     this.weatherForm.temperatureUnit().markAsTouched();
+
+    for (const location of this.weatherForm.locations) {
+      location.city().markAsTouched();
+      location.country().markAsTouched();
+    }
   }
 
   protected shouldShowErrors(fieldErrors: any[], fieldTouched: boolean): boolean {
@@ -85,7 +105,10 @@ export class WeatherChatbotComponent {
 
     const unit = data.temperatureUnit === 'celsius' ? '°C' : '°F';
 
-    return `What's the weather forecast for ${data.city}, ${data.country} on ${date}? Please provide the temperature in ${unit}.`;
+    // Build query for all locations
+    const locationsList = data.locations.map((loc) => `${loc.city}, ${loc.country}`).join(' and ');
+
+    return `What's the weather forecast for ${locationsList} on ${date}? Please provide the temperature in ${unit}.`;
   }
 
   private _addUserMessage(content: string): void {

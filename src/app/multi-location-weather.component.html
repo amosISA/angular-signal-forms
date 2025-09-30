@@ -1,0 +1,54 @@
+<div class="space-y-4">
+  @for (location of weatherForm.locations; track $index; let i = $index) {
+  <div class="border rounded-lg p-4">
+    <div class="flex justify-between items-center mb-3">
+      <h3 class="font-medium">Location {{ i + 1 }}</h3>
+      @if (weatherForm.locations.length > 1) {
+      <button type="button" (click)="removeLocation(i)" class="text-red-600 hover:text-red-700">
+        Remove
+      </button>
+      }
+    </div>
+
+    <div class="grid grid-cols-2 gap-4">
+      <div>
+        <label class="block text-sm font-medium mb-1">City</label>
+        <input
+          type="text"
+          [control]="weatherForm.locations[i].city"
+          placeholder="Enter city"
+          class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+        />
+        @if (weatherForm.locations[i].city().touched() &&
+        weatherForm.locations[i].city().errors().length > 0) { @for (error of
+        weatherForm.locations[i].city().errors(); track error) {
+        <p class="text-red-500 text-xs mt-1">{{ error.message }}</p>
+        } }
+      </div>
+
+      <div>
+        <label class="block text-sm font-medium mb-1">Country</label>
+        <input
+          type="text"
+          [control]="weatherForm.locations[i].country"
+          placeholder="Enter country"
+          class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+        />
+        @if (weatherForm.locations[i].country().touched() &&
+        weatherForm.locations[i].country().errors().length > 0) { @for (error of
+        weatherForm.locations[i].country().errors(); track error) {
+        <p class="text-red-500 text-xs mt-1">{{ error.message }}</p>
+        } }
+      </div>
+    </div>
+  </div>
+  }
+
+  <button
+    type="button"
+    (click)="addLocation()"
+    class="w-full border-2 border-dashed border-gray-300 rounded-lg p-4 text-gray-600 hover:border-blue-500 hover:text-blue-600"
+  >
+    Add Another Location
+  </button>
+</div>
