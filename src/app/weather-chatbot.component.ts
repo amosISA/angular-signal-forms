@@ -1,7 +1,20 @@
 import { JsonPipe } from '@angular/common';
+import { HttpClient } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { applyEach, Control, form, minLength, required } from '@angular/forms/signals';
+import { rxResource } from '@angular/core/rxjs-interop';
+import {
+  applyEach,
+  Control,
+  customError,
+  form,
+  minLength,
+  required,
+  validate,
+  validateAsync,
+} from '@angular/forms/signals';
+import { delay, of, switchMap, tap } from 'rxjs';
 import { ChatService } from './chat.service';
+import { ConfigService } from './config.service';
 import { WeatherLocation } from './multi-location-weather.component';
 
 type TemperatureUnit = 'celsius' | 'fahrenheit';
@@ -28,6 +41,8 @@ type WeatherFormData = {
 })
 export class WeatherChatbotComponent {
   private readonly _chatService = inject(ChatService);
+  private readonly _config = inject(ConfigService);
+  private readonly _http = inject(HttpClient);
 
   protected readonly messages = signal<ChatMessage[]>([]);
   protected readonly isSubmitting = signal(false);
@@ -41,6 +56,12 @@ export class WeatherChatbotComponent {
     temperatureUnit: 'celsius',
   });
 
+  private readonly _cityValidationCache = new Map<string, any>();
+
+  private _getCacheKey(city: string, country: string): string {
+    return `${city.toLowerCase()}_${country.toLowerCase()}`;
+  }
+
   protected readonly weatherForm = form(this._weatherData, (path) => {
     required(path.date, { message: 'Date is required' });
 
@@ -49,6 +70,87 @@ export class WeatherChatbotComponent {
       minLength(location.city, 2, { message: 'City must be at least 2 characters' });
       required(location.country, { message: 'Country is required' });
       minLength(location.country, 2, { message: 'Country must be at least 2 characters' });
+
+      validateAsync(location.city, {
+        params: (ctx) => {
+          const city = ctx.value();
+          const country = ctx.fieldOf(location.country)().value();
+
+          if (!city || city.length < 2 || !country || country.length < 2) {
+            return undefined;
+          }
+
+          return { city, country };
+        },
+
+        factory: (params) => {
+          return rxResource({
+            params,
+            stream: (p) => {
+              if (!p.params) return of(null);
+
+              const { city, country } = p.params;
+              const cacheKey = this._getCacheKey(city, country);
+
+              // Check cache first
+              if (this._cityValidationCache.has(cacheKey)) {
+                console.log(`Using cached result for ${cacheKey}`);
+                return of(this._cityValidationCache.get(cacheKey));
+              }
+
+              const apiKey = this._config.get('WEATHER_API_KEY');
+              const url = `https://api.weatherapi.com/v1/search.json?key=${apiKey}&q=${encodeURIComponent(
+                city
+              )},${encodeURIComponent(country)}`;
+
+              return of(null).pipe(
+                delay(2000),
+                switchMap(() => this._http.get(url)),
+                tap((results) => {
+                  // Store in cache after successful fetch
+                  this._cityValidationCache.set(cacheKey, results);
+                })
+              );
+            },
+          });
+        },
+        errors: (results, ctx) => {
+          console.log(results);
+          if (!results || results.length === 0) {
+            return customError({
+              kind: 'city_not_found',
+              message: `Could not find "${ctx.value()}" in weather database`,
+            });
+          }
+
+          const exactMatch = results.some(
+            (r: any) =>
+              r.name.toLowerCase() === ctx.value().toLowerCase() &&
+              r.country.toLowerCase() === ctx.fieldOf(location.country)().value().toLowerCase()
+          );
+
+          if (!exactMatch) {
+            return customError({
+              kind: 'city_country_mismatch',
+              message: `"${ctx.value()}" does not exist in ${ctx
+                .fieldOf(location.country)()
+                .value()}`,
+            });
+          }
+          return null;
+        },
+      });
+    });
+
+    // Rest of validation...
+    validate(path.locations, (ctx) => {
+      if (ctx.value().length === 0) {
+        return customError({
+          kind: 'empty_array',
+          message: 'At least one location is required',
+        });
+      }
+      return null;
     });
 
     required(path.temperatureUnit, { message: 'Temperature unit is required' });

@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 
 export type AppConfig = {
   AI_STUDIO_API_KEY: string;
+  WEATHER_API_KEY: string;
 };
 
 @Injectable({
