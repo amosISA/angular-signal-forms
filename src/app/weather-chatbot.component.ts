@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+import { JsonPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { Control, form, minLength, required } from '@angular/forms/signals';
 import { ChatService } from './chat.service';
@@ -23,7 +23,7 @@ type WeatherFormData = {
 @Component({
   selector: 'app-weather-chatbot',
   templateUrl: './weather-chatbot.component.html',
-  imports: [CommonModule, Control],
+  imports: [Control, JsonPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class WeatherChatbotComponent {
