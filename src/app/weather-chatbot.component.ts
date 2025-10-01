@@ -3,18 +3,19 @@ import { HttpClient } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import {
+  apply,
   applyEach,
   Control,
   customError,
   form,
   validateAsync,
-  validateStandardSchema,
   validateTree,
 } from '@angular/forms/signals';
 import { delay, of, switchMap, tap } from 'rxjs';
 import { ChatService } from './chat.service';
 import { ConfigService } from './config.service';
-import { weatherFormSchema, type WeatherFormData } from './weather-form.schemas';
+import { WeatherFormData } from './types';
+import { weatherFormSchema } from './weather-form.schemas';
 
 type TemperatureUnit = 'celsius' | 'fahrenheit';
 
@@ -56,8 +57,7 @@ export class WeatherChatbotComponent {
   }
 
   protected readonly weatherForm = form(this._weatherData, (path) => {
-    // Use Zod schema for all basic validation
-    validateStandardSchema(path, weatherFormSchema);
+    apply(path, weatherFormSchema);
 
     // Async validation for city verification
     applyEach(path.locations, (location) => {

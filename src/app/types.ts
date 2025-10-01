@@ -1,3 +1,5 @@
+import { WeatherLocation } from './multi-location-weather.component';
+
 export type TemperatureUnit = 'celsius' | 'fahrenheit';
 
 export type ChatMessage = {
@@ -10,8 +12,7 @@ export type ChatMessage = {
 
 export type WeatherFormData = {
   date: string;
-  country: string;
-  city: string;
+  locations: WeatherLocation[];
   temperatureUnit: TemperatureUnit;
 };
 
