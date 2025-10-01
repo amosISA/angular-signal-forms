@@ -7,16 +7,14 @@ import {
   Control,
   customError,
   form,
-  minLength,
-  required,
-  validate,
   validateAsync,
+  validateStandardSchema,
   validateTree,
 } from '@angular/forms/signals';
 import { delay, of, switchMap, tap } from 'rxjs';
 import { ChatService } from './chat.service';
 import { ConfigService } from './config.service';
-import { WeatherLocation } from './multi-location-weather.component';
+import { weatherFormSchema, type WeatherFormData } from './weather-form.schemas';
 
 type TemperatureUnit = 'celsius' | 'fahrenheit';
 
@@ -26,12 +24,6 @@ type ChatMessage = {
   role: 'user' | 'assistant';
   timestamp: Date;
   isLoading?: boolean;
-};
-
-type WeatherFormData = {
-  date: string;
-  locations: WeatherLocation[];
-  temperatureUnit: TemperatureUnit;
 };
 
 @Component({
@@ -64,14 +56,11 @@ export class WeatherChatbotComponent {
   }
 
   protected readonly weatherForm = form(this._weatherData, (path) => {
-    required(path.date, { message: 'Date is required' });
+    // Use Zod schema for all basic validation
+    validateStandardSchema(path, weatherFormSchema);
 
+    // Async validation for city verification
     applyEach(path.locations, (location) => {
-      required(location.city, { message: 'City is required' });
-      minLength(location.city, 2, { message: 'City must be at least 2 characters' });
-      required(location.country, { message: 'Country is required' });
-      minLength(location.country, 2, { message: 'Country must be at least 2 characters' });
-
       validateAsync(location.city, {
         params: (ctx) => {
           const city = ctx.value();
@@ -93,7 +82,6 @@ export class WeatherChatbotComponent {
               const { city, country } = p.params;
               const cacheKey = this._getCacheKey(city, country);
 
-              // Check cache first
               if (this._cityValidationCache.has(cacheKey)) {
                 console.log(`Using cached result for ${cacheKey}`);
                 return of(this._cityValidationCache.get(cacheKey));
@@ -108,7 +96,6 @@ export class WeatherChatbotComponent {
                 delay(2000),
                 switchMap(() => this._http.get(url)),
                 tap((results) => {
-                  // Store in cache after successful fetch
                   this._cityValidationCache.set(cacheKey, results);
                 }),
               );
@@ -116,7 +103,6 @@ export class WeatherChatbotComponent {
           });
         },
         errors: (results, ctx) => {
-          console.log(results);
           if (!results || results.length === 0) {
             return customError({
               kind: 'city_not_found',
@@ -143,7 +129,7 @@ export class WeatherChatbotComponent {
       });
     });
 
-    // Tree validator for duplicate locations
+    // Keep tree validator for duplicate detection
     validateTree(path, (ctx) => {
       const errors: any[] = [];
       const locations = ctx.value().locations;
@@ -152,7 +138,6 @@ export class WeatherChatbotComponent {
         const city = location.city.valueOf();
         const country = location.country.valueOf();
 
-        // Skip empty values
         if (!city || !country) return;
 
         locations.forEach((otherLocation, otherIndex) => {
@@ -173,19 +158,6 @@ export class WeatherChatbotComponent {
 
       return errors.length > 0 ? errors : null;
     });
-
-    // Array validation
-    validate(path.locations, (ctx) => {
-      if (ctx.value().length === 0) {
-        return customError({
-          kind: 'empty_array',
-          message: 'At least one location is required',
-        });
-      }
-      return null;
-    });
-
-    required(path.temperatureUnit, { message: 'Temperature unit is required' });
   });
 
   protected addLocation(): void {
@@ -238,8 +210,6 @@ export class WeatherChatbotComponent {
     });
 
     const unit = data.temperatureUnit === 'celsius' ? '°C' : '°F';
-
-    // Build query for all locations
     const locationsList = data.locations.map((loc) => `${loc.city}, ${loc.country}`).join(' and ');
 
     return `What's the weather forecast for ${locationsList} on ${date}? Please provide the temperature in ${unit}.`;
