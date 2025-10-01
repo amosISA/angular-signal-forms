@@ -142,6 +142,23 @@ export class WeatherChatbotComponent {
       });
     });
 
+    // Cross-field validation: Ensure no duplicate locations
+    validate(path, (ctx) => {
+      const locations = ctx.value().locations;
+
+      if (locations.length === 2) {
+        const [first, second] = locations;
+        if (first.city === second.city && first.country === second.country) {
+          return customError({
+            kind: 'same_locations',
+            message: 'Locations must be different',
+          });
+        }
+      }
+
+      return null;
+    });
+
     // Rest of validation...
     validate(path.locations, (ctx) => {
       if (ctx.value().length === 0) {

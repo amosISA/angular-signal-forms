@@ -1,0 +1,34 @@
+{
+  "arrowParens": "always",
+  "printWidth": 140,
+  "singleQuote": true,
+  "trailingComma": "es5",
+  "useTabs": false,
+  "bracketSpacing": false,
+  "semi": true,
+  "singleAttributePerLine": true,
+  "htmlWhitespaceSensitivity": "ignore",
+  "overrides": [
+    {
+      "files": "*.html",
+      "options": {
+        "parser": "angular"
+      }
+    }
+  ],
+  "plugins": ["prettier-plugin-organize-attributes"],
+  "attributeGroups": [
+    "$ANGULAR_ELEMENT_REF",
+    "$ANGULAR_STRUCTURAL_DIRECTIVE",
+    "$ANGULAR_OUTPUT",
+    "$ANGULAR_TWO_WAY_BINDING",
+    "$ANGULAR_INPUT",
+    "$ANGULAR_ANIMATION",
+    "$ANGULAR_ANIMATION_INPUT",
+    "^(id|name)$",
+    "^class$",
+    "$DEFAULT",
+    "^aria-"
+  ],
+  "attributeSort": "ASC"
+}

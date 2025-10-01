@@ -1,0 +1,14 @@
+# Add files here to ignore them from prettier formatting
+/tmp
+/out
+/out-tsc
+/cache
+/dist
+/coverage
+/.nx/cache
+/.nx/workspace-data
+.angular
+/.angular
+/.sass-cache
+*.md
+/node_modules
