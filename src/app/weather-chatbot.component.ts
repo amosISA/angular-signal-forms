@@ -11,6 +11,7 @@ import {
   required,
   validate,
   validateAsync,
+  validateTree,
 } from '@angular/forms/signals';
 import { delay, of, switchMap, tap } from 'rxjs';
 import { ChatService } from './chat.service';
@@ -100,7 +101,7 @@ export class WeatherChatbotComponent {
 
               const apiKey = this._config.get('WEATHER_API_KEY');
               const url = `https://api.weatherapi.com/v1/search.json?key=${apiKey}&q=${encodeURIComponent(
-                city
+                city,
               )},${encodeURIComponent(country)}`;
 
               return of(null).pipe(
@@ -109,7 +110,7 @@ export class WeatherChatbotComponent {
                 tap((results) => {
                   // Store in cache after successful fetch
                   this._cityValidationCache.set(cacheKey, results);
-                })
+                }),
               );
             },
           });
@@ -126,7 +127,7 @@ export class WeatherChatbotComponent {
           const exactMatch = results.some(
             (r: any) =>
               r.name.toLowerCase() === ctx.value().toLowerCase() &&
-              r.country.toLowerCase() === ctx.fieldOf(location.country)().value().toLowerCase()
+              r.country.toLowerCase() === ctx.fieldOf(location.country)().value().toLowerCase(),
           );
 
           if (!exactMatch) {
@@ -142,24 +143,38 @@ export class WeatherChatbotComponent {
       });
     });
 
-    // Cross-field validation: Ensure no duplicate locations
-    validate(path, (ctx) => {
+    // Tree validator for duplicate locations
+    validateTree(path, (ctx) => {
+      const errors: any[] = [];
       const locations = ctx.value().locations;
 
-      if (locations.length === 2) {
-        const [first, second] = locations;
-        if (first.city === second.city && first.country === second.country) {
-          return customError({
-            kind: 'same_locations',
-            message: 'Locations must be different',
-          });
-        }
-      }
+      locations.forEach((location, index) => {
+        const city = location.city.valueOf();
+        const country = location.country.valueOf();
 
-      return null;
+        // Skip empty values
+        if (!city || !country) return;
+
+        locations.forEach((otherLocation, otherIndex) => {
+          if (index !== otherIndex) {
+            if (
+              city === otherLocation.city.valueOf() &&
+              country === otherLocation.country.valueOf()
+            ) {
+              errors.push({
+                kind: 'duplicate_location',
+                field: ctx.field.locations[index].city,
+                message: `Duplicate location: ${city}, ${country}`,
+              });
+            }
+          }
+        });
+      });
+
+      return errors.length > 0 ? errors : null;
     });
 
-    // Rest of validation...
+    // Array validation
     validate(path.locations, (ctx) => {
       if (ctx.value().length === 0) {
         return customError({
@@ -259,8 +274,8 @@ export class WeatherChatbotComponent {
 
       this.messages.update((messages) =>
         messages.map((msg) =>
-          msg.id === loadingMessage.id ? { ...msg, content: response, isLoading: false } : msg
-        )
+          msg.id === loadingMessage.id ? { ...msg, content: response, isLoading: false } : msg,
+        ),
       );
     } catch (error) {
       this.messages.update((messages) =>
@@ -272,8 +287,8 @@ export class WeatherChatbotComponent {
                   'Sorry, I encountered an error while fetching the weather data. Please try again.',
                 isLoading: false,
               }
-            : msg
-        )
+            : msg,
+        ),
       );
     } finally {
       this.isSubmitting.set(false);
