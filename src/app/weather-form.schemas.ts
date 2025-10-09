@@ -8,8 +8,7 @@ import {
   schema,
   validate,
 } from '@angular/forms/signals';
-import { WeatherLocation } from './multi-location-weather.component';
-import { TemperatureUnit, WeatherFormData } from './types';
+import { TemperatureUnit, WeatherFormData, WeatherLocation } from './types';
 
 // 1. Atomic schemas - smallest reusable units
 const cityNameSchema = schema<string>((path) => {

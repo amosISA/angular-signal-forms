@@ -11,13 +11,10 @@ import {
   validateAsync,
   validateTree,
 } from '@angular/forms/signals';
-import { delay, of, switchMap, tap } from 'rxjs';
+import { delay, firstValueFrom, of, switchMap, tap } from 'rxjs';
 import { ChatService } from './chat.service';
-import { ConfigService } from './config.service';
 import { WeatherFormData } from './types';
 import { weatherFormSchema } from './weather-form.schemas';
-
-type TemperatureUnit = 'celsius' | 'fahrenheit';
 
 type ChatMessage = {
   id: string;
@@ -35,7 +32,6 @@ type ChatMessage = {
 })
 export class WeatherChatbotComponent {
   private readonly _chatService = inject(ChatService);
-  private readonly _config = inject(ConfigService);
   private readonly _http = inject(HttpClient);
 
   protected readonly messages = signal<ChatMessage[]>([]);
@@ -82,18 +78,17 @@ export class WeatherChatbotComponent {
               const { city, country } = p.params;
               const cacheKey = this._getCacheKey(city, country);
 
+              // Check cache first
               if (this._cityValidationCache.has(cacheKey)) {
                 console.log(`Using cached result for ${cacheKey}`);
                 return of(this._cityValidationCache.get(cacheKey));
               }
 
-              const apiKey = this._config.get('WEATHER_API_KEY');
-              const url = `https://api.weatherapi.com/v1/search.json?key=${apiKey}&q=${encodeURIComponent(
-                city,
-              )},${encodeURIComponent(country)}`;
+              // Call backend instead of direct API
+              const url = `http://localhost:3000/api/validate-city?city=${encodeURIComponent(city)}&country=${encodeURIComponent(country)}`;
 
               return of(null).pipe(
-                delay(2000),
+                delay(500), // Reduced delay since backend is local
                 switchMap(() => this._http.get(url)),
                 tap((results) => {
                   this._cityValidationCache.set(cacheKey, results);
@@ -240,7 +235,8 @@ export class WeatherChatbotComponent {
     this.messages.update((messages) => [...messages, loadingMessage]);
 
     try {
-      const response = await this._chatService.sendMessage(query);
+      // Convert Observable to Promise using firstValueFrom
+      const response = await firstValueFrom(this._chatService.sendMessage(query));
 
       this.messages.update((messages) =>
         messages.map((msg) =>
