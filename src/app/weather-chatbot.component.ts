@@ -6,6 +6,7 @@ import {
   apply,
   applyEach,
   customError,
+  debounce,
   Field,
   form,
   validateAsync,
@@ -57,6 +58,8 @@ export class WeatherChatbotComponent {
 
     // Async validation for city verification
     applyEach(path.locations, (location) => {
+      debounce(location.city, 500);
+
       validateAsync(location.city, {
         params: (ctx) => {
           const city = ctx.value();
