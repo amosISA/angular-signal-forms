@@ -5,8 +5,8 @@ import { rxResource } from '@angular/core/rxjs-interop';
 import {
   apply,
   applyEach,
-  Control,
   customError,
+  Field,
   form,
   validateAsync,
   validateTree,
@@ -27,7 +27,7 @@ type ChatMessage = {
 @Component({
   selector: 'app-weather-chatbot',
   templateUrl: './weather-chatbot.component.html',
-  imports: [Control, JsonPipe],
+  imports: [Field, JsonPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class WeatherChatbotComponent {
@@ -60,7 +60,7 @@ export class WeatherChatbotComponent {
       validateAsync(location.city, {
         params: (ctx) => {
           const city = ctx.value();
-          const country = ctx.fieldOf(location.country)().value();
+          const country = ctx.fieldTreeOf(location.country)().value();
 
           if (!city || city.length < 2 || !country || country.length < 2) {
             return undefined;
@@ -88,7 +88,7 @@ export class WeatherChatbotComponent {
               const url = `http://localhost:3000/api/validate-city?city=${encodeURIComponent(city)}&country=${encodeURIComponent(country)}`;
 
               return of(null).pipe(
-                delay(500), // Reduced delay since backend is local
+                delay(500),
                 switchMap(() => this._http.get(url)),
                 tap((results) => {
                   this._cityValidationCache.set(cacheKey, results);
@@ -97,7 +97,9 @@ export class WeatherChatbotComponent {
             },
           });
         },
-        errors: (results, ctx) => {
+
+        // NEW: onSuccess receives the resource result as first param
+        onSuccess: (results, ctx) => {
           if (!results || results.length === 0) {
             return customError({
               kind: 'city_not_found',
@@ -108,18 +110,27 @@ export class WeatherChatbotComponent {
           const exactMatch = results.some(
             (r: any) =>
               r.name.toLowerCase() === ctx.value().toLowerCase() &&
-              r.country.toLowerCase() === ctx.fieldOf(location.country)().value().toLowerCase(),
+              r.country.toLowerCase() === ctx.fieldTreeOf(location.country)().value().toLowerCase(),
           );
 
           if (!exactMatch) {
             return customError({
               kind: 'city_country_mismatch',
               message: `"${ctx.value()}" does not exist in ${ctx
-                .fieldOf(location.country)()
+                .fieldTreeOf(location.country)()
                 .value()}`,
             });
           }
-          return null;
+
+          return null; // No errors - validation passed
+        },
+
+        onError: (error, ctx) => {
+          console.error('City validation error:', error);
+          return customError({
+            kind: 'validation_error',
+            message: 'Unable to validate city. Please try again.',
+          });
         },
       });
     });
