@@ -40,8 +40,8 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@angular/build": "^21.0.0-rc.3",
-    "@angular/cli": "^21.0.0-rc.3",
+    "@angular/build": "^21.0.3",
+    "@angular/cli": "^21.0.3",
     "@angular/compiler-cli": "^21.0.0-rc.3",
     "@tailwindcss/postcss": "^4.1.12",
     "@types/jasmine": "~5.1.0",
