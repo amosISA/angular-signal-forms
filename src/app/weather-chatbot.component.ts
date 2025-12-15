@@ -1,16 +1,19 @@
-import { JsonPipe } from '@angular/common';
+import { DatePipe, JsonPipe } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, resource, Signal, signal } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import {
   apply,
   applyEach,
+  createManagedMetadataKey,
+  createMetadataKey,
   customError,
   debounce,
   Field,
   form,
+  metadata,
   validateAsync,
-  validateTree,
+  validateTree
 } from '@angular/forms/signals';
 import { delay, firstValueFrom, of, switchMap, tap } from 'rxjs';
 import { ChatService } from './chat.service';
@@ -25,10 +28,16 @@ type ChatMessage = {
   isLoading?: boolean;
 };
 
+interface ValidationMetrics {
+  attempts: number;
+  lastValidated: Date | null;
+}
+
+
 @Component({
   selector: 'app-weather-chatbot',
   templateUrl: './weather-chatbot.component.html',
-  imports: [Field, JsonPipe],
+  imports: [Field, JsonPipe, DatePipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class WeatherChatbotComponent {
@@ -46,6 +55,50 @@ export class WeatherChatbotComponent {
     locations: [{ city: '', country: '' }],
     temperatureUnit: 'celsius',
   });
+
+  protected readonly CHAR_COUNT = createMetadataKey<number, number>({
+    reduce: (acc: number, item: number) => item,
+    getInitial: () => 0
+  });
+
+  protected readonly LAST_VALIDATED = createMetadataKey<Date | null, Date | null>({
+    reduce: (acc, item) => item,
+    getInitial: () => null
+  });
+
+  protected readonly VALIDATION_METRICS = createMetadataKey<ValidationMetrics, ValidationMetrics>({
+    reduce: (acc, item) => ({
+      attempts: acc.attempts + item.attempts,  // Aggregate attempts
+      lastValidated: item.lastValidated || acc.lastValidated  // Keep most recent
+    }),
+    getInitial: () => ({ attempts: 0, lastValidated: null })
+  });
+
+  protected readonly WEATHER_PREVIEW = createManagedMetadataKey(
+    (params: Signal<{ city: string; country: string } | undefined>) =>
+      resource({
+        params,
+        loader: async ({ params }) => {
+
+          // Handle undefined or empty params
+          if (!params || !params.city || !params.country) {
+            return null;
+          }
+
+
+          const response = await fetch(
+            `http://localhost:3000/api/weather-preview?city=${params.city}&country=${params.country}`
+          );
+
+          if (!response.ok) {
+            return null;
+          }
+
+          const data = await response.json();
+          return data;
+        }
+      })
+  );
 
   private readonly _cityValidationCache = new Map<string, any>();
 
@@ -101,7 +154,6 @@ export class WeatherChatbotComponent {
           });
         },
 
-        // NEW: onSuccess receives the resource result as first param
         onSuccess: (results, ctx) => {
           if (!results || results.length === 0) {
             return customError({
@@ -136,9 +188,30 @@ export class WeatherChatbotComponent {
           });
         },
       });
+
+      metadata(location.city, this.CHAR_COUNT, ({ value }) => {
+        return value().length;
+      });
+
+      metadata(location.city, this.LAST_VALIDATED, ({ state }) => {
+        if (state.valid() && !state.pending()) {
+          return new Date();
+        }
+        return null;
+      });
+
+      metadata(location, this.WEATHER_PREVIEW, ({ value }) => {
+        const city = value().city;
+        const country = value().country;
+
+        if (city.length < 2 || country.length < 2) {
+          return { city: '', country: '' };
+        }
+
+        return { city, country };
+      });
     });
 
-    // Keep tree validator for duplicate detection
     validateTree(path, (ctx) => {
       const errors: any[] = [];
       const locations = ctx.value().locations;
@@ -262,11 +335,11 @@ export class WeatherChatbotComponent {
         messages.map((msg) =>
           msg.id === loadingMessage.id
             ? {
-                ...msg,
-                content:
-                  'Sorry, I encountered an error while fetching the weather data. Please try again.',
-                isLoading: false,
-              }
+              ...msg,
+              content:
+                'Sorry, I encountered an error while fetching the weather data. Please try again.',
+              isLoading: false,
+            }
             : msg,
         ),
       );

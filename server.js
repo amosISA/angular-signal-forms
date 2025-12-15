@@ -94,6 +94,57 @@ app.get('/api/validate-city', async (req, res) => {
   }
 });
 
+// Weather preview endpoint
+app.get('/api/weather-preview', async (req, res) => {
+  const { city, country } = req.query;
+
+  if (!city || !country) {
+    return res.status(400).json({ error: 'City and country are required' });
+  }
+
+  try {
+    const weatherApiKey = process.env.WEATHER_API_KEY;
+    // Use the current weather endpoint instead of search
+    const url = `https://api.weatherapi.com/v1/current.json?key=${weatherApiKey}&q=${encodeURIComponent(city)},${encodeURIComponent(country)}`;
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      return res.status(404).json({ error: 'City not found' });
+    }
+
+    const data = await response.json();
+
+    // Extract and format the preview data
+    const preview = {
+      temp: Math.round(data.current.temp_c),
+      conditions: data.current.condition.text,
+      icon: getWeatherIcon(data.current.condition.text)
+    };
+
+    res.json(preview);
+  } catch (error) {
+    console.error('Error fetching weather preview:', error);
+    res.status(500).json({ error: 'Failed to fetch weather preview' });
+  }
+});
+
+// Helper function to map weather conditions to emojis
+function getWeatherIcon(condition) {
+  const conditionLower = condition.toLowerCase();
+
+  if (conditionLower.includes('sunny') || conditionLower.includes('clear')) return '☀️';
+  if (conditionLower.includes('partly cloudy')) return '⛅';
+  if (conditionLower.includes('cloudy') || conditionLower.includes('overcast')) return '☁️';
+  if (conditionLower.includes('rain') || conditionLower.includes('drizzle')) return '🌧️';
+  if (conditionLower.includes('storm') || conditionLower.includes('thunder')) return '⛈️';
+  if (conditionLower.includes('snow')) return '🌨️';
+  if (conditionLower.includes('fog') || conditionLower.includes('mist')) return '🌫️';
+  if (conditionLower.includes('wind')) return '💨';
+
+  return '🌤️'; // Default
+}
+
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Weather AI Server running on http://localhost:${PORT}`);

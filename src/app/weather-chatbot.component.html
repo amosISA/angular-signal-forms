@@ -64,6 +64,29 @@
                       class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                     />
 
+                    <div class="flex items-start flex-col">
+                      @let charCount = weatherForm.locations[i].city().metadata(CHAR_COUNT);
+                      @if (charCount) {
+                        <span class="text-gray-500 text-xs">
+                          {{ charCount() }} / 50 characters
+                        </span>
+                      }
+
+                      @let lastChecked = weatherForm.locations[i].city().metadata(LAST_VALIDATED);
+                      @if (lastChecked && lastChecked()) {
+                        <span class="text-green-500 text-xs">
+                          ✓ Verified {{ lastChecked() | date: 'short' }}
+                        </span>
+                      }
+
+                      @let metrics = weatherForm.locations[i].city().metadata(VALIDATION_METRICS);
+                      @if (metrics && metrics().attempts > 3) {
+                        <span class="text-orange-500 text-xs">
+                          ⚠️ Multiple validation attempts - check your spelling
+                        </span>
+                      }
+                    </div>
+
                     @if (weatherForm.locations[i].city().pending()) {
                       <span class="text-blue-500 text-xs mt-1 flex items-center">
                         <svg class="animate-spin h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24">
@@ -111,6 +134,7 @@
                       placeholder="e.g., United States"
                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
                     />
+
                     @if (
                       shouldShowErrors(
                         weatherForm.locations[i].country().errors(),
@@ -122,8 +146,35 @@
                       }
                     }
                   </div>
+
+                  @let preview = weatherForm.locations[i]().metadata(WEATHER_PREVIEW);
+
+                  @if (preview) {
+                    <div class="bg-blue-50 rounded p-3">
+                      @if (preview.isLoading()) {
+                        <div class="text-gray-600 text-sm">Loading preview...</div>
+                      }
+
+                      @if (preview.value(); as weather) {
+                        <div class="flex items-center gap-2">
+                          <span class="text-2xl">{{ weather.icon }}</span>
+                          <div>
+                            <div class="font-medium">{{ weather.temp }}°C</div>
+                            <div class="text-gray-600 text-sm">{{ weather.conditions }}</div>
+                          </div>
+                        </div>
+                      }
+
+                      @if (preview.error()) {
+                        <div class="text-red-500 text-xs">Error: {{ preview.error() }}</div>
+                      }
+                    </div>
+                  } @else {
+                    <div class="text-xs text-gray-500">No preview metadata found</div>
+                  }
                 </div>
               }
+
               @if (
                 shouldShowErrors(
                   weatherForm.locations().errors(),
