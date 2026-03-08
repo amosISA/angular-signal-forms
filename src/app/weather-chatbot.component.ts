@@ -1,5 +1,5 @@
 import { JsonPipe } from '@angular/common';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
 import {
@@ -9,26 +9,21 @@ import {
   debounce,
   Field,
   form,
+  FormRoot,
+  submit,
   validateAsync,
   validateTree,
 } from '@angular/forms/signals';
 import { delay, firstValueFrom, of, switchMap, tap } from 'rxjs';
 import { ChatService } from './chat.service';
-import { WeatherFormData } from './types';
+import { ChatMessage, NetworkError, WeatherApiError, WeatherFormData } from './types';
 import { weatherFormSchema } from './weather-form.schemas';
-
-type ChatMessage = {
-  id: string;
-  content: string;
-  role: 'user' | 'assistant';
-  timestamp: Date;
-  isLoading?: boolean;
-};
 
 @Component({
   selector: 'app-weather-chatbot',
   templateUrl: './weather-chatbot.component.html',
-  imports: [Field, JsonPipe],
+  // Angular 21.2: FormRoot directive for declarative form submission
+  imports: [Field, FormRoot, JsonPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class WeatherChatbotComponent {
@@ -37,9 +32,15 @@ export class WeatherChatbotComponent {
 
   protected readonly messages = signal<ChatMessage[]>([]);
   protected readonly isSubmitting = signal(false);
+  // Angular 21.2: instanceof in templates — track last error for type-based rendering
+  protected readonly lastError = signal<Error | null>(null);
 
   protected readonly messageCount = computed(() => this.messages().length);
   protected readonly isDevelopment = signal(true);
+
+  // Angular 21.2: Expose error classes for instanceof checks in templates
+  protected readonly WeatherApiError = WeatherApiError;
+  protected readonly NetworkError = NetworkError;
 
   private readonly _weatherData = signal<WeatherFormData>({
     date: new Date().toISOString().split('T')[0],
@@ -47,127 +48,148 @@ export class WeatherChatbotComponent {
     temperatureUnit: 'celsius',
   });
 
-  private readonly _cityValidationCache = new Map<string, any>();
+  private readonly _cityValidationCache = new Map<string, unknown>();
 
   private _getCacheKey(city: string, country: string): string {
     return `${city.toLowerCase()}_${country.toLowerCase()}`;
   }
 
-  protected readonly weatherForm = form(this._weatherData, (path) => {
-    apply(path, weatherFormSchema);
+  // Angular 21.2: FormRoot + submission options — submit logic lives in form() config
+  protected readonly weatherForm = form(
+    this._weatherData,
+    (path) => {
+      apply(path, weatherFormSchema);
 
-    // Async validation for city verification
-    applyEach(path.locations, (location) => {
-      debounce(location.city, 500);
+      // Async validation for city verification
+      applyEach(path.locations, (location) => {
+        debounce(location.city, 500);
 
-      validateAsync(location.city, {
-        params: (ctx) => {
-          const city = ctx.value();
-          const country = ctx.fieldTreeOf(location.country)().value();
+        validateAsync(location.city, {
+          params: (ctx) => {
+            const city = ctx.value();
+            const country = ctx.fieldTreeOf(location.country)().value();
 
-          if (!city || city.length < 2 || !country || country.length < 2) {
-            return undefined;
-          }
+            if (!city || city.length < 2 || !country || country.length < 2) {
+              return undefined;
+            }
 
-          return { city, country };
-        },
+            return { city, country };
+          },
 
-        factory: (params) => {
-          return rxResource({
-            params,
-            stream: (p) => {
-              if (!p.params) return of(null);
+          factory: (params) => {
+            return rxResource({
+              params,
+              stream: (p) => {
+                if (!p.params) return of(null);
 
-              const { city, country } = p.params;
-              const cacheKey = this._getCacheKey(city, country);
+                const { city, country } = p.params;
+                const cacheKey = this._getCacheKey(city, country);
 
-              // Check cache first
-              if (this._cityValidationCache.has(cacheKey)) {
-                console.log(`Using cached result for ${cacheKey}`);
-                return of(this._cityValidationCache.get(cacheKey));
-              }
+                if (this._cityValidationCache.has(cacheKey)) {
+                  return of(this._cityValidationCache.get(cacheKey));
+                }
 
-              // Call backend instead of direct API
-              const url = `http://localhost:3000/api/validate-city?city=${encodeURIComponent(city)}&country=${encodeURIComponent(country)}`;
+                const url = `http://localhost:3000/api/validate-city?city=${encodeURIComponent(city)}&country=${encodeURIComponent(country)}`;
 
-              return of(null).pipe(
-                delay(500),
-                switchMap(() => this._http.get(url)),
-                tap((results) => {
-                  this._cityValidationCache.set(cacheKey, results);
-                }),
-              );
-            },
-          });
-        },
-
-        // NEW: onSuccess receives the resource result as first param
-        onSuccess: (results, ctx) => {
-          if (!results || results.length === 0) {
-            return customError({
-              kind: 'city_not_found',
-              message: `Could not find "${ctx.value()}" in weather database`,
+                return of(null).pipe(
+                  delay(500),
+                  switchMap(() => this._http.get(url)),
+                  tap((results) => {
+                    this._cityValidationCache.set(cacheKey, results);
+                  }),
+                );
+              },
             });
-          }
+          },
 
-          const exactMatch = results.some(
-            (r: any) =>
-              r.name.toLowerCase() === ctx.value().toLowerCase() &&
-              r.country.toLowerCase() === ctx.fieldTreeOf(location.country)().value().toLowerCase(),
-          );
-
-          if (!exactMatch) {
-            return customError({
-              kind: 'city_country_mismatch',
-              message: `"${ctx.value()}" does not exist in ${ctx
-                .fieldTreeOf(location.country)()
-                .value()}`,
-            });
-          }
-
-          return null; // No errors - validation passed
-        },
-
-        onError: (error, ctx) => {
-          console.error('City validation error:', error);
-          return customError({
-            kind: 'validation_error',
-            message: 'Unable to validate city. Please try again.',
-          });
-        },
-      });
-    });
-
-    // Keep tree validator for duplicate detection
-    validateTree(path, (ctx) => {
-      const errors: any[] = [];
-      const locations = ctx.value().locations;
-
-      locations.forEach((location, index) => {
-        const city = location.city.valueOf();
-        const country = location.country.valueOf();
-
-        if (!city || !country) return;
-
-        locations.forEach((otherLocation, otherIndex) => {
-          if (index !== otherIndex) {
-            if (
-              city === otherLocation.city.valueOf() &&
-              country === otherLocation.country.valueOf()
-            ) {
-              errors.push({
-                kind: 'duplicate_location',
-                field: ctx.field.locations[index].city,
-                message: `Duplicate location: ${city}, ${country}`,
+          onSuccess: (results, ctx) => {
+            if (!results || (results as unknown[]).length === 0) {
+              return customError({
+                kind: 'city_not_found',
+                message: `Could not find "${ctx.value()}" in weather database`,
               });
             }
-          }
+
+            const resultArray = results as { name: string; country: string }[];
+            const exactMatch = resultArray.some(
+              (r) =>
+                r.name.toLowerCase() === ctx.value().toLowerCase() &&
+                r.country.toLowerCase() ===
+                  ctx.fieldTreeOf(location.country)().value().toLowerCase(),
+            );
+
+            if (!exactMatch) {
+              return customError({
+                kind: 'city_country_mismatch',
+                message: `"${ctx.value()}" does not exist in ${ctx
+                  .fieldTreeOf(location.country)()
+                  .value()}`,
+              });
+            }
+
+            return null;
+          },
+
+          onError: (_error, _ctx) => {
+            console.error('City validation error:', _error);
+            return customError({
+              kind: 'validation_error',
+              message: 'Unable to validate city. Please try again.',
+            });
+          },
         });
       });
 
-      return errors.length > 0 ? errors : null;
-    });
-  });
+      // Tree validator for duplicate detection
+      validateTree(path, (ctx) => {
+        const errors: {
+          kind: string;
+          field: unknown;
+          message: string;
+        }[] = [];
+        const locations = ctx.value().locations;
+
+        locations.forEach((location, index) => {
+          const city = location.city.valueOf();
+          const country = location.country.valueOf();
+
+          if (!city || !country) return;
+
+          locations.forEach((otherLocation, otherIndex) => {
+            if (index !== otherIndex) {
+              if (
+                city === otherLocation.city.valueOf() &&
+                country === otherLocation.country.valueOf()
+              ) {
+                errors.push({
+                  kind: 'duplicate_location',
+                  field: ctx.field.locations[index].city,
+                  message: `Duplicate location: ${city}, ${country}`,
+                });
+              }
+            }
+          });
+        });
+
+        return errors.length > 0 ? errors : null;
+      });
+    },
+    {
+      // Angular 21.2: Form-level submission options
+      submission: {
+        action: async (_field) => {
+          const formData = this._weatherData();
+          const query = this._buildWeatherQuery(formData);
+          this._addUserMessage(query);
+          await this._sendMessageToAI(query);
+        },
+        // Angular 21.2: onInvalid receives the field — focus first invalid field
+        onInvalid: (field) => {
+          field.focus();
+        },
+      },
+    },
+  );
 
   protected addLocation(): void {
     this._weatherData.update((data) => ({
@@ -183,31 +205,17 @@ export class WeatherChatbotComponent {
     }));
   }
 
-  protected onSubmitWeatherQuery(): void {
-    if (!this.weatherForm().valid()) {
-      this._markAllFieldsAsTouched();
-      return;
-    }
-
-    const formData = this._weatherData();
-    const query = this._buildWeatherQuery(formData);
-
-    this._addUserMessage(query);
-    this._sendMessageToAI(query);
+  // Angular 21.2: Manual submit fallback (FormRoot handles this automatically now)
+  protected onManualSubmit(): void {
+    submit(this.weatherForm);
   }
 
-  private _markAllFieldsAsTouched(): void {
-    this.weatherForm.date().markAsTouched();
-    this.weatherForm.temperatureUnit().markAsTouched();
-
-    for (const location of this.weatherForm.locations) {
-      location.city().markAsTouched();
-      location.country().markAsTouched();
-    }
-  }
-
-  protected shouldShowErrors(fieldErrors: any[], fieldTouched: boolean): boolean {
+  protected shouldShowErrors(fieldErrors: unknown[], fieldTouched: boolean): boolean {
     return fieldErrors.length > 0 && fieldTouched;
+  }
+
+  protected dismissError(): void {
+    this.lastError.set(null);
   }
 
   private _buildWeatherQuery(data: WeatherFormData): string {
@@ -237,6 +245,7 @@ export class WeatherChatbotComponent {
 
   private async _sendMessageToAI(query: string): Promise<void> {
     this.isSubmitting.set(true);
+    this.lastError.set(null);
 
     const loadingMessage: ChatMessage = {
       id: this._generateId(),
@@ -249,7 +258,6 @@ export class WeatherChatbotComponent {
     this.messages.update((messages) => [...messages, loadingMessage]);
 
     try {
-      // Convert Observable to Promise using firstValueFrom
       const response = await firstValueFrom(this._chatService.sendMessage(query));
 
       this.messages.update((messages) =>
@@ -258,13 +266,21 @@ export class WeatherChatbotComponent {
         ),
       );
     } catch (error) {
+      // Angular 21.2: instanceof — categorize errors for type-based template rendering
+      if (error instanceof HttpErrorResponse) {
+        this.lastError.set(new WeatherApiError(error.message, error.status));
+      } else if (error instanceof TypeError && error.message.includes('fetch')) {
+        this.lastError.set(new NetworkError());
+      } else {
+        this.lastError.set(error instanceof Error ? error : new Error('Unknown error'));
+      }
+
       this.messages.update((messages) =>
         messages.map((msg) =>
           msg.id === loadingMessage.id
             ? {
                 ...msg,
-                content:
-                  'Sorry, I encountered an error while fetching the weather data. Please try again.',
+                content: 'Sorry, I encountered an error. Please try again.',
                 isLoading: false,
               }
             : msg,
