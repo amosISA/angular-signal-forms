@@ -1,7 +1,6 @@
 import {
   apply,
   applyEach,
-  customError,
   maxLength,
   minLength,
   required,
@@ -34,16 +33,16 @@ export const locationsArraySchema = schema<WeatherLocation[]>((path) => {
   // Validate array itself
   validate(path, (ctx) => {
     if (ctx.value().length === 0) {
-      return customError({
+      return {
         kind: 'empty_array',
         message: 'At least one location is required',
-      });
+      };
     }
     if (ctx.value().length > 5) {
-      return customError({
+      return {
         kind: 'too_many',
         message: 'Maximum 5 locations allowed',
-      });
+      };
     }
     return null;
   });
@@ -62,20 +61,20 @@ export const futureDateSchema = schema<string>((path) => {
     today.setHours(0, 0, 0, 0);
 
     if (selectedDate < today) {
-      return customError({
+      return {
         kind: 'past_date',
         message: 'Date cannot be in the past',
-      });
+      };
     }
 
     const maxDate = new Date();
     maxDate.setDate(maxDate.getDate() + 14);
 
     if (selectedDate > maxDate) {
-      return customError({
+      return {
         kind: 'far_future',
         message: 'Weather forecasts only available for the next 14 days',
-      });
+      };
     }
 
     return null;
@@ -89,10 +88,10 @@ export const temperatureUnitSchema = schema<TemperatureUnit>((path) => {
   validate(path, (ctx) => {
     const value = ctx.value();
     if (value !== 'celsius' && value !== 'fahrenheit') {
-      return customError({
+      return {
         kind: 'invalid_unit',
         message: 'Temperature unit must be celsius or fahrenheit',
-      });
+      };
     }
     return null;
   });

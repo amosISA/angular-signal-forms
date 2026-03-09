@@ -5,11 +5,10 @@ import { rxResource } from '@angular/core/rxjs-interop';
 import {
   apply,
   applyEach,
-  customError,
   debounce,
-  Field,
-  form,
+  FormField,
   FormRoot,
+  form,
   submit,
   validateAsync,
   validateTree,
@@ -22,8 +21,8 @@ import { weatherFormSchema } from './weather-form.schemas';
 @Component({
   selector: 'app-weather-chatbot',
   templateUrl: './weather-chatbot.component.html',
-  // Angular 21.2: FormRoot directive for declarative form submission
-  imports: [Field, FormRoot, JsonPipe],
+  // Angular 21.2: FormField (renamed from Field) + FormRoot for declarative form submission
+  imports: [FormField, FormRoot, JsonPipe],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class WeatherChatbotComponent {
@@ -32,13 +31,13 @@ export class WeatherChatbotComponent {
 
   protected readonly messages = signal<ChatMessage[]>([]);
   protected readonly isSubmitting = signal(false);
-  // Angular 21.2: instanceof in templates — track last error for type-based rendering
+  // Track last error for type-based rendering
   protected readonly lastError = signal<Error | null>(null);
 
   protected readonly messageCount = computed(() => this.messages().length);
   protected readonly isDevelopment = signal(true);
 
-  // Angular 21.2: Expose error classes for instanceof checks in templates
+  // Expose error classes for instanceof checks in templates
   protected readonly WeatherApiError = WeatherApiError;
   protected readonly NetworkError = NetworkError;
 
@@ -104,10 +103,10 @@ export class WeatherChatbotComponent {
 
           onSuccess: (results, ctx) => {
             if (!results || (results as unknown[]).length === 0) {
-              return customError({
+              return {
                 kind: 'city_not_found',
                 message: `Could not find "${ctx.value()}" in weather database`,
-              });
+              };
             }
 
             const resultArray = results as { name: string; country: string }[];
@@ -119,12 +118,12 @@ export class WeatherChatbotComponent {
             );
 
             if (!exactMatch) {
-              return customError({
+              return {
                 kind: 'city_country_mismatch',
                 message: `"${ctx.value()}" does not exist in ${ctx
                   .fieldTreeOf(location.country)()
                   .value()}`,
-              });
+              };
             }
 
             return null;
@@ -132,10 +131,10 @@ export class WeatherChatbotComponent {
 
           onError: (_error, _ctx) => {
             console.error('City validation error:', _error);
-            return customError({
+            return {
               kind: 'validation_error',
               message: 'Unable to validate city. Please try again.',
-            });
+            };
           },
         });
       });
@@ -144,7 +143,6 @@ export class WeatherChatbotComponent {
       validateTree(path, (ctx) => {
         const errors: {
           kind: string;
-          field: unknown;
           message: string;
         }[] = [];
         const locations = ctx.value().locations;
@@ -163,7 +161,6 @@ export class WeatherChatbotComponent {
               ) {
                 errors.push({
                   kind: 'duplicate_location',
-                  field: ctx.field.locations[index].city,
                   message: `Duplicate location: ${city}, ${country}`,
                 });
               }
@@ -182,10 +179,6 @@ export class WeatherChatbotComponent {
           const query = this._buildWeatherQuery(formData);
           this._addUserMessage(query);
           await this._sendMessageToAI(query);
-        },
-        // Angular 21.2: onInvalid receives the field — focus first invalid field
-        onInvalid: (field) => {
-          field.focus();
         },
       },
     },
@@ -216,6 +209,19 @@ export class WeatherChatbotComponent {
 
   protected dismissError(): void {
     this.lastError.set(null);
+  }
+
+  // Helper methods for instanceof checks (until Angular ships instanceof in templates)
+  protected isWeatherApiError(error: Error): error is WeatherApiError {
+    return error instanceof WeatherApiError;
+  }
+
+  protected isNetworkError(error: Error): error is NetworkError {
+    return error instanceof NetworkError;
+  }
+
+  protected getStatusCode(error: Error): number {
+    return (error as WeatherApiError).statusCode;
   }
 
   private _buildWeatherQuery(data: WeatherFormData): string {
@@ -266,7 +272,7 @@ export class WeatherChatbotComponent {
         ),
       );
     } catch (error) {
-      // Angular 21.2: instanceof — categorize errors for type-based template rendering
+      // Categorize errors for type-based rendering
       if (error instanceof HttpErrorResponse) {
         this.lastError.set(new WeatherApiError(error.message, error.status));
       } else if (error instanceof TypeError && error.message.includes('fetch')) {
