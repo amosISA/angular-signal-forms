@@ -2,6 +2,7 @@ import { JsonPipe } from '@angular/common';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { rxResource } from '@angular/core/rxjs-interop';
+import { RouterLink } from '@angular/router';
 import {
   apply,
   applyEach,
@@ -22,7 +23,7 @@ import { weatherFormSchema } from './weather-form.schemas';
   selector: 'app-weather-chatbot',
   templateUrl: './weather-chatbot.component.html',
   // Angular 21.2: FormField (renamed from Field) + FormRoot for declarative form submission
-  imports: [FormField, FormRoot, JsonPipe],
+  imports: [FormField, FormRoot, JsonPipe, RouterLink],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class WeatherChatbotComponent {

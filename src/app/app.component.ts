@@ -1,10 +1,10 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
-import { WeatherChatbotComponent } from './weather-chatbot.component';
+import { RouterOutlet } from '@angular/router';
 
 @Component({
   selector: 'app-root',
-  imports: [WeatherChatbotComponent],
+  imports: [RouterOutlet],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<app-weather-chatbot />`,
+  template: `<router-outlet />`,
 })
 export class AppComponent {}

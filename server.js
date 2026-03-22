@@ -72,6 +72,58 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
+// Weather data endpoint — returns current weather for a city
+app.get('/api/weather', async (req, res) => {
+  const { city } = req.query;
+
+  if (!city) {
+    return res.status(400).json({ error: 'City is required' });
+  }
+
+  try {
+    const weatherApiKey = process.env.WEATHER_API_KEY;
+    const url = `https://api.weatherapi.com/v1/current.json?key=${weatherApiKey}&q=${encodeURIComponent(city)}&aqi=no`;
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      return res.status(response.status).json({ error: 'City not found' });
+    }
+    const data = await response.json();
+
+    res.json({
+      city: data.location.name,
+      country: data.location.country,
+      region: data.location.region,
+      localTime: data.location.localtime,
+      temperature: {
+        celsius: data.current.temp_c,
+        fahrenheit: data.current.temp_f,
+        feelsLikeCelsius: data.current.feelslike_c,
+        feelsLikeFahrenheit: data.current.feelslike_f,
+      },
+      condition: {
+        text: data.current.condition.text,
+        icon: data.current.condition.icon,
+      },
+      wind: {
+        kph: data.current.wind_kph,
+        mph: data.current.wind_mph,
+        direction: data.current.wind_dir,
+      },
+      humidity: data.current.humidity,
+      cloud: data.current.cloud,
+      uv: data.current.uv,
+      visibility: {
+        km: data.current.vis_km,
+        miles: data.current.vis_miles,
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching weather:', error);
+    res.status(500).json({ error: 'Failed to fetch weather data' });
+  }
+});
+
 // Weather validation endpoint
 app.get('/api/validate-city', async (req, res) => {
   const { city, country } = req.query;
