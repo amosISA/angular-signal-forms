@@ -1,6 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
-import { httpResource } from '@angular/common/http';
 import { JsonPipe } from '@angular/common';
+import { httpResource } from '@angular/common/http';
+import { ChangeDetectionStrategy, Component, computed, debounced, signal } from '@angular/core';
 import { withPreviousValue } from './with-previous-value';
 
 /**
@@ -62,11 +62,12 @@ const CITIES: CityOption[] = [
         <div class="text-center mb-8">
           <h1 class="text-4xl font-bold text-gray-800 mb-2">🌍 City Weather Dashboard</h1>
           <p class="text-gray-600 max-w-2xl mx-auto">
-            Demonstrating
+            Demonstrating Angular 22's
+            <code class="bg-gray-200 px-1.5 py-0.5 rounded text-sm font-mono">debounced()</code>
+            signal utility alongside
             <code class="bg-gray-200 px-1.5 py-0.5 rounded text-sm font-mono"
               >Resource Composition via Snapshots</code
-            >
-            — click a city and watch the old weather data stay visible while the new data loads.
+            >.
           </p>
         </div>
 
@@ -98,12 +99,46 @@ const CITIES: CityOption[] = [
           </div>
         </div>
 
-        <!-- City Selector -->
+        <!-- Search Input — debounced() in action -->
+        <div class="max-w-md mx-auto mb-6">
+          <div class="relative">
+            <input
+              type="text"
+              [value]="searchInput()"
+              (input)="searchInput.set($any($event.target).value)"
+              placeholder="Type a city name to search..."
+              class="w-full px-4 py-3 pl-10 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all text-gray-800 shadow-sm"
+            />
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+            @if (debouncedSearch.isLoading()) {
+              <span
+                class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-blue-500 font-medium animate-pulse"
+              >
+                debouncing...
+              </span>
+            }
+          </div>
+          <div class="flex items-center justify-between mt-2 px-1">
+            <p class="text-xs text-gray-500">
+              Debounced value:
+              <code class="bg-gray-200 px-1 rounded font-mono">{{ debouncedSearch.value() }}</code>
+            </p>
+            <p
+              class="text-xs font-mono"
+              [class.text-blue-500]="debouncedSearch.isLoading()"
+              [class.text-green-600]="!debouncedSearch.isLoading()"
+            >
+              {{ debouncedSearch.status() }}
+            </p>
+          </div>
+        </div>
+
+        <!-- City Selector (quick picks) -->
         <div class="flex flex-wrap justify-center gap-3 mb-8">
           @for (city of cities; track city.name) {
             <button
               type="button"
-              (click)="selectedCity.set(city.name)"
+              (click)="searchInput.set(city.name)"
               class="px-4 py-2.5 rounded-xl font-medium text-sm transition-all shadow-sm border-2"
               [class.bg-blue-600]="selectedCity() === city.name"
               [class.text-white]="selectedCity() === city.name"
@@ -156,9 +191,7 @@ const CITIES: CityOption[] = [
                       </p>
                     </div>
                     <div class="text-right">
-                      <div class="text-4xl font-light">
-                        {{ weather.temperature.celsius }}°C
-                      </div>
+                      <div class="text-4xl font-light">{{ weather.temperature.celsius }}°C</div>
                       <p class="text-blue-100 text-sm">
                         Feels like {{ weather.temperature.feelsLikeCelsius }}°C
                       </p>
@@ -195,7 +228,9 @@ const CITIES: CityOption[] = [
                   </div>
                   <div class="bg-white px-5 py-4">
                     <p class="text-xs text-gray-500 uppercase tracking-wide">Visibility</p>
-                    <p class="text-lg font-semibold text-gray-800">{{ weather.visibility.km }} km</p>
+                    <p class="text-lg font-semibold text-gray-800">
+                      {{ weather.visibility.km }} km
+                    </p>
                   </div>
                   <div class="bg-white px-5 py-4 col-span-2">
                     <p class="text-xs text-gray-500 uppercase tracking-wide">Local Time</p>
@@ -211,7 +246,7 @@ const CITIES: CityOption[] = [
               </div>
             } @else if (!activeResource().isLoading()) {
               <div class="bg-white rounded-2xl shadow-lg p-8 text-center">
-                <div class="text-4xl mb-3">🌤️</div>
+                <div class="text-4xl mb-3">🌤��</div>
                 <p class="text-gray-500">Select a city to see its weather</p>
               </div>
             } @else {
@@ -241,8 +276,14 @@ const CITIES: CityOption[] = [
                   <span class="text-gray-600">Status:</span>
                   <span
                     class="px-2.5 py-1 rounded-full text-xs font-bold"
-                    [class.bg-blue-100]="activeResource().status() === 'loading' || activeResource().status() === 'reloading'"
-                    [class.text-blue-700]="activeResource().status() === 'loading' || activeResource().status() === 'reloading'"
+                    [class.bg-blue-100]="
+                      activeResource().status() === 'loading' ||
+                      activeResource().status() === 'reloading'
+                    "
+                    [class.text-blue-700]="
+                      activeResource().status() === 'loading' ||
+                      activeResource().status() === 'reloading'
+                    "
                     [class.bg-green-100]="activeResource().status() === 'resolved'"
                     [class.text-green-700]="activeResource().status() === 'resolved'"
                     [class.bg-gray-100]="activeResource().status() === 'idle'"
@@ -292,65 +333,92 @@ const CITIES: CityOption[] = [
               </div>
             </div>
 
+            <!-- Debounced Signal State — NEW -->
+            <div class="bg-white rounded-2xl shadow-lg p-6">
+              <h3 class="text-lg font-semibold text-gray-800 mb-3">⏱️ Debounced Signal State</h3>
+              <div class="space-y-2 text-sm">
+                <div class="flex justify-between items-center">
+                  <span class="text-gray-600">Raw input:</span>
+                  <span class="font-mono text-xs text-gray-800"> "{{ searchInput() }}" </span>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="text-gray-600">Debounced value:</span>
+                  <span class="font-mono text-xs text-gray-800">
+                    "{{ debouncedSearch.value() }}"
+                  </span>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="text-gray-600">Debounce status:</span>
+                  <span
+                    class="px-2.5 py-1 rounded-full text-xs font-bold"
+                    [class.bg-blue-100]="debouncedSearch.status() === 'loading'"
+                    [class.text-blue-700]="debouncedSearch.status() === 'loading'"
+                    [class.bg-green-100]="debouncedSearch.status() === 'resolved'"
+                    [class.text-green-700]="debouncedSearch.status() === 'resolved'"
+                  >
+                    {{ debouncedSearch.status() }}
+                  </span>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="text-gray-600">Wait time:</span>
+                  <span class="font-mono text-xs text-gray-800">500ms</span>
+                </div>
+              </div>
+              <div class="mt-3 p-3 bg-amber-50 rounded-lg border border-amber-100">
+                <p class="text-xs text-amber-800">
+                  💡 <strong>debounced()</strong> returns a
+                  <code class="bg-amber-100 px-1 rounded">Resource&lt;T&gt;</code> — its
+                  <code class="bg-amber-100 px-1 rounded">status</code> is
+                  <code class="bg-amber-100 px-1 rounded">'loading'</code> while waiting, then
+                  <code class="bg-amber-100 px-1 rounded">'resolved'</code> once settled. Type fast
+                  and watch the status change!
+                </p>
+              </div>
+            </div>
+
             <!-- How It Works -->
             <div class="bg-white rounded-2xl shadow-lg p-6">
               <h3 class="text-lg font-semibold text-gray-800 mb-3">🔄 How It Works</h3>
               @if (useSnapshotComposition()) {
                 <div class="space-y-3 text-sm text-gray-600">
                   <p>
-                    <strong class="text-gray-800">With snapshot composition</strong>, when you
-                    switch cities:
+                    <strong class="text-gray-800">With snapshot composition + debounced()</strong>:
                   </p>
                   <ol class="list-decimal list-inside space-y-1.5 ml-1">
+                    <li>User types → raw signal updates immediately</li>
                     <li>
-                      <code class="text-xs bg-gray-100 px-1 rounded">httpResource</code> enters
-                      <code class="text-xs bg-blue-100 text-blue-700 px-1 rounded">'loading'</code>
-                      state
+                      <code class="text-xs bg-gray-100 px-1 rounded">debounced()</code> waits 500ms
+                      (status:
+                      <code class="text-xs bg-blue-100 text-blue-700 px-1 rounded">'loading'</code>)
                     </li>
                     <li>
-                      <code class="text-xs bg-gray-100 px-1 rounded">linkedSignal</code> sees the
-                      new snapshot + the <em>previous</em> one
-                    </li>
-                    <li>
-                      It returns
-                      <code class="text-xs bg-gray-100 px-1 rounded"
-                        >{{ '{' }} status: 'loading', value: previousData {{ '}' }}</code
-                      >
-                    </li>
-                    <li>
-                      <code class="text-xs bg-gray-100 px-1 rounded">resourceFromSnapshots()</code>
-                      converts it back to a full
-                      <code class="text-xs bg-gray-100 px-1 rounded">Resource</code>
-                    </li>
-                    <li>
-                      Result:
+                      After 500ms, debounced value settles (status:
                       <code class="text-xs bg-green-100 text-green-700 px-1 rounded"
-                        >isLoading = true</code
-                      >
-                      but
-                      <code class="text-xs bg-green-100 text-green-700 px-1 rounded"
-                        >value() = old data</code
-                      >
-                      ✨
+                        >'resolved'</code
+                      >)
+                    </li>
+                    <li>
+                      <code class="text-xs bg-gray-100 px-1 rounded">httpResource</code> fires with
+                      the settled city name
+                    </li>
+                    <li>
+                      <code class="text-xs bg-gray-100 px-1 rounded">withPreviousValue()</code>
+                      keeps old data visible while loading ✨
                     </li>
                   </ol>
                   <div class="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
                     <p class="text-xs text-blue-800 font-mono leading-relaxed">
-                      Resource → .snapshot → linkedSignal → resourceFromSnapshots() → Resource
+                      signal → debounced() → httpResource → withPreviousValue() → UI
                     </p>
                   </div>
                 </div>
               } @else {
                 <div class="space-y-3 text-sm text-gray-600">
-                  <p>
-                    <strong class="text-gray-800">Without snapshot composition</strong>, when you
-                    switch cities:
-                  </p>
+                  <p><strong class="text-gray-800">Without snapshot composition</strong>:</p>
                   <ol class="list-decimal list-inside space-y-1.5 ml-1">
+                    <li>User types → debounced() still waits 500ms ✅</li>
                     <li>
-                      <code class="text-xs bg-gray-100 px-1 rounded">httpResource</code> enters
-                      <code class="text-xs bg-blue-100 text-blue-700 px-1 rounded">'loading'</code>
-                      state
+                      <code class="text-xs bg-gray-100 px-1 rounded">httpResource</code> fires
                     </li>
                     <li>
                       <code class="text-xs bg-gray-100 px-1 rounded">value()</code> becomes
@@ -358,7 +426,6 @@ const CITIES: CityOption[] = [
                       immediately
                     </li>
                     <li>The weather card disappears — blank screen / skeleton</li>
-                    <li>New data arrives, card re-appears</li>
                   </ol>
                   <div class="mt-3 p-3 bg-red-50 rounded-lg border border-red-100">
                     <p class="text-xs text-red-700">
@@ -372,19 +439,16 @@ const CITIES: CityOption[] = [
             <!-- Snapshot Debug -->
             <div class="bg-white rounded-2xl shadow-lg p-6">
               <h3 class="text-lg font-semibold text-gray-800 mb-3">🔍 Raw Snapshot</h3>
-              <pre
-                class="text-xs bg-gray-50 rounded-lg p-3 overflow-auto max-h-40 text-gray-700"
-              >{{ snapshotDebug() | json }}</pre>
+              <pre class="text-xs bg-gray-50 rounded-lg p-3 overflow-auto max-h-40 text-gray-700">{{
+                snapshotDebug() | json
+              }}</pre>
             </div>
           </div>
         </div>
 
         <!-- Back link -->
         <div class="text-center mt-8">
-          <a
-            href="/"
-            class="text-blue-600 hover:text-blue-800 text-sm font-medium hover:underline"
-          >
+          <a href="/" class="text-blue-600 hover:text-blue-800 text-sm font-medium hover:underline">
             ← Back to Weather Chatbot
           </a>
         </div>
@@ -394,12 +458,32 @@ const CITIES: CityOption[] = [
 })
 export class WeatherDashboardComponent {
   protected readonly cities = CITIES;
-  protected readonly selectedCity = signal('London');
   protected readonly useSnapshotComposition = signal(true);
 
   /**
+   * Raw search input — updates on every keystroke.
+   */
+  protected readonly searchInput = signal('London');
+
+  /**
+   * Angular 22: debounced() — creates a Resource<T> from a signal with debouncing.
+   *
+   * While the user is typing, debouncedSearch.status() is 'loading'.
+   * Once 500ms passes without changes, it settles to 'resolved' with the final value.
+   * This prevents firing an HTTP request on every keystroke.
+   */
+  protected readonly debouncedSearch = debounced(() => this.searchInput(), 500);
+
+  /**
+   * The settled city name — only updates after the debounce period.
+   * This is what drives the httpResource.
+   */
+  protected readonly selectedCity = computed(() => this.debouncedSearch.value() ?? 'London');
+
+  /**
    * Raw httpResource — fetches weather data reactively when selectedCity changes.
-   * When the city changes, value() becomes undefined until the new data arrives.
+   * Because selectedCity is derived from debounced(), this only fires after the user
+   * stops typing for 500ms.
    */
   private readonly _rawWeatherResource = httpResource<WeatherData>(
     () => `http://localhost:3000/api/weather?city=${encodeURIComponent(this.selectedCity())}`,
@@ -429,6 +513,8 @@ export class WeatherDashboardComponent {
       isLoading: res.isLoading(),
       hasValue: res.hasValue(),
       city: res.hasValue() ? res.value()?.city : null,
+      debouncedStatus: this.debouncedSearch.status(),
+      debouncedValue: this.debouncedSearch.value(),
     };
   });
 }
